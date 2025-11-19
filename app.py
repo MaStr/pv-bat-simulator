@@ -12,7 +12,7 @@ from batcontrol.logic.logic_interface import CalculationInput, CalculationParame
 app = Flask(__name__)
 
 def berechne_linearer_verbrauch(statischer_preis, verbrauch, pv_strom, batterie_kapazitaet, 
-                                max_lade_leistung, max_entlade_leistung, preis_abstand):
+                                max_lade_leistung, max_entlade_leistung, preis_abstand, anfangs_soc=0.0):
     """
     Modell 1: Linearer Verbrauch mit Batterie-Simulation und statischem Preis
     
@@ -24,10 +24,11 @@ def berechne_linearer_verbrauch(statischer_preis, verbrauch, pv_strom, batterie_
     - max_lade_leistung: Maximale Ladeleistung (W)
     - max_entlade_leistung: Maximale Entladeleistung (W)
     - preis_abstand: Preislicher Abstand für dynamisches Nachladen (€/kWh)
+    - anfangs_soc: Anfänglicher Ladestand der Batterie (0.0-1.0, Standard: 0.0)
     """
     
     # Initialisierung
-    batterie_stand = 0  # Aktueller Batteriestand in Wh
+    batterie_stand = anfangs_soc * batterie_kapazitaet  # Aktueller Batteriestand in Wh
     netzbezug = []
     batteriebezug = []
     kosten_pro_stunde = []
@@ -87,7 +88,7 @@ def berechne_linearer_verbrauch(statischer_preis, verbrauch, pv_strom, batterie_
 
 
 def berechne_linearer_verbrauch_dynamisch(preise, verbrauch, pv_strom, batterie_kapazitaet, 
-                                          max_lade_leistung, max_entlade_leistung):
+                                          max_lade_leistung, max_entlade_leistung, anfangs_soc=0.0):
     """
     Modell 2: Linearer Verbrauch mit dynamischen Strompreisen (ungesteuerte Batterie)
     
@@ -101,10 +102,11 @@ def berechne_linearer_verbrauch_dynamisch(preise, verbrauch, pv_strom, batterie_
     - batterie_kapazitaet: Batteriekapazität (Wh)
     - max_lade_leistung: Maximale Ladeleistung (W)
     - max_entlade_leistung: Maximale Entladeleistung (W)
+    - anfangs_soc: Anfänglicher Ladestand der Batterie (0.0-1.0, Standard: 0.0)
     """
     
     # Initialisierung
-    batterie_stand = 0  # Aktueller Batteriestand in Wh
+    batterie_stand = anfangs_soc * batterie_kapazitaet  # Aktueller Batteriestand in Wh
     netzbezug = []
     batteriebezug = []
     kosten_pro_stunde = []
@@ -549,6 +551,9 @@ def berechnen():
         if len(verbrauch) != 24 or len(pv_strom) != 24:
             return jsonify({'error': 'Es müssen genau 24 Werte für Verbrauch und PV-Strom angegeben werden'}), 400
         
+        # Gemeinsamer Anfangs-SOC für alle Modelle
+        anfangs_soc = float(data.get('anfangs_soc', 0.0))
+        
         if modell == 1:
             # Modell 1: Statischer Preis
             statischer_preis = float(data['statischer_preis'])
@@ -557,7 +562,7 @@ def berechnen():
             ergebnis = berechne_linearer_verbrauch(
                 statischer_preis, verbrauch, pv_strom, 
                 batterie_kapazitaet, max_lade_leistung, 
-                max_entlade_leistung, preis_abstand
+                max_entlade_leistung, preis_abstand, anfangs_soc
             )
         elif modell == 2:
             # Modell 2: Dynamische Preise
@@ -569,13 +574,12 @@ def berechnen():
             ergebnis = berechne_linearer_verbrauch_dynamisch(
                 preise, verbrauch, pv_strom, 
                 batterie_kapazitaet, max_lade_leistung, 
-                max_entlade_leistung
+                max_entlade_leistung, anfangs_soc
             )
         elif modell == 3:
             # Modell 3: Aktive Steuerung mit Optimierung
             preise = [float(x) for x in data['preise']]
             preis_abstand = float(data['preis_abstand'])
-            anfangs_soc = float(data.get('anfangs_soc', 0.0))
             
             if len(preise) != 24:
                 return jsonify({'error': 'Es müssen genau 24 Werte für dynamische Preise angegeben werden'}), 400
@@ -591,7 +595,6 @@ def berechnen():
             min_preis_differenz = float(data.get('min_preis_differenz', 0.05))
             always_allow_discharge_limit = float(data.get('always_allow_discharge_limit', 0.9))
             max_charging_from_grid_limit = float(data.get('max_charging_from_grid_limit', 0.8))
-            anfangs_soc = float(data.get('anfangs_soc', 0.2))
             
             if len(preise) != 24:
                 return jsonify({'error': 'Es müssen genau 24 Werte für dynamische Preise angegeben werden'}), 400
