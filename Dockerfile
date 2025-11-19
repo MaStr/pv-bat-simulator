@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir \
     pytz
 
 # Lade das batcontrol wheel-file von GitHub herunter und installiere es
-RUN wget https://github.com/muexxl/batcontrol/releases/download/v0.5.5/batcontrol-0.5.5-py3-none-any.whl \
+RUN wget https://github.com/muexxl/batcontrol/releases/download/0.5.5/batcontrol-0.5.5-py3-none-any.whl \
     && pip install --no-cache-dir batcontrol-0.5.5-py3-none-any.whl \
     && rm batcontrol-0.5.5-py3-none-any.whl
 
