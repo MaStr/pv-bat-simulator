@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PV & Batterie Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 40px;
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 2.5em;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        
+        .section {
+            margin-bottom: 30px;
+            padding: 25px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .input-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        input[type="number"], select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        
+        input[type="number"]:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .time-series-input {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 10px;
+        }
+        
+        .time-series-input input {
+            padding: 8px;
+            font-size: 0.9em;
+        }
+        
+        .hour-label {
+            display: block;
+            font-size: 0.8em;
+            color: #666;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.1em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: 600;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        .button-container {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        #ergebnis {
+            margin-top: 30px;
+        }
+        
+        .result-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.3);
+        }
+        
+        .result-card h3 {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+        
+        .result-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: center;
+            border-bottom: 1px solid #eee;
+        }
+        
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.9em;
+            letter-spacing: 0.5px;
+        }
+        
+        tr:hover {
+            background: #f8f9fa;
+        }
+        
+        tr:last-child td {
+            border-bottom: none;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #ff6b6b;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        
+        .battery-params {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        
+        .charts-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+            margin-top: 30px;
+        }
+        
+        .chart-wrapper {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .chart-wrapper h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            text-align: center;
+        }
+        
+        .chart-canvas {
+            position: relative;
+            height: 300px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ PV & Batterie Simulator</h1>
+        <p class="subtitle">Vergleich verschiedener Batteriesteuerungsmodelle</p>
+        
+        <div class="info-box">
+            <strong>ℹ️ Hinweis:</strong> Alle Leistungswerte in Wh (Wattstunden), Preise in €/kWh
+        </div>
+        
+        <!-- Modell-Auswahl -->
+        <div class="section">
+            <h2>🎯 Modell-Auswahl</h2>
+            <div class="input-group">
+                <label for="modell">Simulationsmodell wählen</label>
+                <select id="modell" name="modell">
+                    <option value="1">Modell 1: Linearer Verbrauch - Statischer Preis</option>
+                    <option value="2">Modell 2: Linearer Verbrauch - Dynamischer Preis</option>
+                    <option value="3">Modell 3: Aktive Steuerung - Dynamischer Preis (Optimiert)</option>
+                </select>
+            </div>
+        </div>
+        
+        <form id="simulationForm">
+            <!-- Statischer Strompreis (nur für Modell 1) -->
+            <div class="section" id="section-statischer-preis">
+                <h2>💶 Statischer Strompreis</h2>
+                <div class="input-group">
+                    <label for="statischer_preis">Strompreis (€/kWh)</label>
+                    <input type="number" id="statischer_preis" name="statischer_preis" 
+                           value="0.30" step="0.01">
+                </div>
+            </div>
+            
+            <!-- Dynamische Strompreise (nur für Modell 2) -->
+            <div class="section" id="section-dynamische-preise" style="display: none;">
+                <h2>📊 Dynamische Strompreise (€/kWh) - 24 Stunden</h2>
+                <div class="time-series-input" id="preise-container">
+                    {% for i in range(24) %}
+                    <div>
+                        <span class="hour-label">{{ "%02d"|format(i) }}:00</span>
+                        <input type="number" step="0.01" name="preis_{{ i }}" 
+                               value="{{ [0.25, 0.22, 0.20, 0.19, 0.18, 0.20, 0.28, 0.32, 0.30, 0.28, 0.26, 0.25, 0.24, 0.23, 0.24, 0.26, 0.30, 0.35, 0.38, 0.36, 0.32, 0.30, 0.28, 0.26][i] }}">
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Verbrauch -->
+            <div class="section">
+                <h2>🏠 Verbrauch (Wh) - 24 Stunden</h2>
+                <div class="time-series-input" id="verbrauch-container">
+                    {% for i in range(24) %}
+                    <div>
+                        <span class="hour-label">{{ "%02d"|format(i) }}:00</span>
+                        <input type="number" step="1" name="verbrauch_{{ i }}" 
+                               value="{{ beispiel_verbrauch[i] }}" required>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- PV-Strom -->
+            <div class="section">
+                <h2>☀️ PV-Stromerzeugung (Wh) - 24 Stunden</h2>
+                <div class="time-series-input" id="pv-container">
+                    {% for i in range(24) %}
+                    <div>
+                        <span class="hour-label">{{ "%02d"|format(i) }}:00</span>
+                        <input type="number" step="1" name="pv_{{ i }}" 
+                               value="{{ beispiel_pv[i] }}" required>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            
+            <!-- Batterie-Parameter -->
+            <div class="section">
+                <h2>🔋 Batterie-Parameter</h2>
+                <div class="battery-params">
+                    <div class="input-group">
+                        <label for="batterie_kapazitaet">Batteriekapazität (Wh)</label>
+                        <input type="number" id="batterie_kapazitaet" name="batterie_kapazitaet" 
+                               value="5000" step="100" required>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="max_lade_leistung">Max. Ladeleistung (W)</label>
+                        <input type="number" id="max_lade_leistung" name="max_lade_leistung" 
+                               value="3000" step="100" required>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="max_entlade_leistung">Max. Entladeleistung (W)</label>
+                        <input type="number" id="max_entlade_leistung" name="max_entlade_leistung" 
+                               value="3000" step="100" required>
+                    </div>
+                    
+                    <div class="input-group" id="preis-abstand-group">
+                        <label for="preis_abstand">Preisabstand für Nachladen (€/kWh)</label>
+                        <input type="number" id="preis_abstand" name="preis_abstand" 
+                               value="0.05" step="0.01">
+                    </div>
+                    
+                    <div class="input-group" id="anfangs-soc-group">
+                        <label for="anfangs_soc">Anfangs-Ladestand um 24 Uhr (0-100%)</label>
+                        <input type="number" id="anfangs_soc" name="anfangs_soc" 
+                               value="0" min="0" max="100" step="1">
+                        <small style="color: #666; margin-top: 5px; display: block;">
+                            Ladestand der Batterie zu Beginn der Simulation (24:00 Uhr)
+                        </small>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="button-container">
+                <button type="submit">🚀 Berechnung starten</button>
+            </div>
+        </form>
+        
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p style="margin-top: 15px; color: #667eea; font-weight: 600;">Berechnung läuft...</p>
+        </div>
+        
+        <div id="ergebnis"></div>
+    </div>
+    
+    <script>
+        // Modell-Wechsel Handler
+        document.getElementById('modell').addEventListener('change', function() {
+            const modell = parseInt(this.value);
+            const sectionStatisch = document.getElementById('section-statischer-preis');
+            const sectionDynamisch = document.getElementById('section-dynamische-preise');
+            const preisAbstandGroup = document.getElementById('preis-abstand-group');
+            const anfangsSocGroup = document.getElementById('anfangs-soc-group');
+            
+            if (modell === 1) {
+                sectionStatisch.style.display = 'block';
+                sectionDynamisch.style.display = 'none';
+                preisAbstandGroup.style.display = 'block';
+                anfangsSocGroup.style.display = 'none';
+                document.getElementById('statischer_preis').required = true;
+            } else if (modell === 2) {
+                sectionStatisch.style.display = 'none';
+                sectionDynamisch.style.display = 'block';
+                preisAbstandGroup.style.display = 'none';
+                anfangsSocGroup.style.display = 'none';
+                document.getElementById('statischer_preis').required = false;
+            } else if (modell === 3) {
+                sectionStatisch.style.display = 'none';
+                sectionDynamisch.style.display = 'block';
+                preisAbstandGroup.style.display = 'block';
+                anfangsSocGroup.style.display = 'block';
+                document.getElementById('statischer_preis').required = false;
+            }
+        });
+        
+        // Initiales Laden: Anfangs-SOC nur bei Modell 3 anzeigen
+        document.addEventListener('DOMContentLoaded', function() {
+            const anfangsSocGroup = document.getElementById('anfangs-soc-group');
+            anfangsSocGroup.style.display = 'none';  // Initial versteckt
+        });
+        
+        document.getElementById('simulationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            // Loading anzeigen
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('ergebnis').innerHTML = '';
+            
+            // Daten sammeln
+            const formData = new FormData(e.target);
+            const modell = parseInt(document.getElementById('modell').value);
+            
+            const verbrauch = [];
+            const pv_strom = [];
+            
+            for (let i = 0; i < 24; i++) {
+                verbrauch.push(parseFloat(formData.get(`verbrauch_${i}`)));
+                pv_strom.push(parseFloat(formData.get(`pv_${i}`)));
+            }
+            
+            const data = {
+                modell: modell,
+                verbrauch: verbrauch,
+                pv_strom: pv_strom,
+                batterie_kapazitaet: parseFloat(formData.get('batterie_kapazitaet')),
+                max_lade_leistung: parseFloat(formData.get('max_lade_leistung')),
+                max_entlade_leistung: parseFloat(formData.get('max_entlade_leistung'))
+            };
+            
+            // Modell-spezifische Daten hinzufügen
+            if (modell === 1) {
+                data.statischer_preis = parseFloat(formData.get('statischer_preis'));
+                data.preis_abstand = parseFloat(formData.get('preis_abstand'));
+            } else if (modell === 2) {
+                const preise = [];
+                for (let i = 0; i < 24; i++) {
+                    preise.push(parseFloat(formData.get(`preis_${i}`)));
+                }
+                data.preise = preise;
+            } else if (modell === 3) {
+                const preise = [];
+                for (let i = 0; i < 24; i++) {
+                    preise.push(parseFloat(formData.get(`preis_${i}`)));
+                }
+                data.preise = preise;
+                data.preis_abstand = parseFloat(formData.get('preis_abstand'));
+                data.anfangs_soc = parseFloat(formData.get('anfangs_soc')) / 100.0;  // Konvertiere % in Dezimalzahl
+            }
+            
+            try {
+                const response = await fetch('/berechnen', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    zeigeErgebnis(result);
+                } else {
+                    zeigeError(result.error || 'Ein Fehler ist aufgetreten');
+                }
+            } catch (error) {
+                zeigeError('Verbindungsfehler: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+        
+        function zeigeErgebnis(result) {
+            const ergebnisDiv = document.getElementById('ergebnis');
+            const modell = parseInt(document.getElementById('modell').value);
+            
+            let html = `
+                <div class="result-card">
+                    <h3>💰 Gesamtkosten</h3>
+                    <div class="value">${result.gesamtkosten.toFixed(2)} €</div>
+                </div>`;
+            
+            // Für Modell 2 & 3: Gewichteten Durchschnittspreis anzeigen
+            if ((modell === 2 || modell === 3) && result.gewichteter_preis !== undefined) {
+                html += `
+                <div class="result-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                    <h3>📊 Gewichteter Durchschnittspreis</h3>
+                    <div class="value">${result.gewichteter_preis.toFixed(4)} €/kWh</div>
+                    <p style="margin-top: 15px; font-size: 1em;">
+                        Gesamt Netzbezug: ${result.gesamt_netzbezug_kwh} kWh
+                    </p>`;
+                
+                // Für Modell 3: Optimierungsstatus anzeigen
+                if (modell === 3 && result.optimierungsstatus) {
+                    html += `
+                    <p style="margin-top: 10px; font-size: 0.9em; opacity: 0.9;">
+                        🎯 Optimierungsstatus: ${result.optimierungsstatus}
+                    </p>`;
+                }
+                
+                html += `
+                </div>`;
+            }
+            
+            html += `
+                <div class="section">
+                    <h2>📊 Diagramme - Zeitreihen-Visualisierung</h2>
+                    <div class="charts-container">
+                        <div class="chart-wrapper">
+                            <h3>🔌 Strombezug (Wh)</h3>
+                            <div class="chart-canvas">
+                                <canvas id="bezugChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-wrapper">
+                            <h3>🔋 Batteriestand (Wh)</h3>
+                            <div class="chart-canvas">
+                                <canvas id="batterieChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-wrapper">
+                            <h3>💶 Kosten pro Stunde (€)</h3>
+                            <div class="chart-canvas">
+                                <canvas id="kostenChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <div class="chart-wrapper">
+                            <h3>⚡ Leistungsübersicht (Wh)</h3>
+                            <div class="chart-canvas">
+                                <canvas id="uebersichtChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="section">
+                    <h2>📈 Zeitreihen-Auswertung (24 Stunden)</h2>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Stunde</th>
+                                <th>Netzbezug (Wh)</th>
+                                <th>Batteriebezug (Wh)</th>
+                                <th>Batteriestand (Wh)</th>`;
+            
+            // Preisspalte nur für Modell 2 & 3
+            if ((modell === 2 || modell === 3) && result.preise) {
+                html += `<th>Preis (€/kWh)</th>`;
+            }
+            
+            html += `
+                                <th>Kosten (€)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            for (let i = 0; i < 24; i++) {
+                html += `
+                    <tr>
+                        <td><strong>${String(i).padStart(2, '0')}:00</strong></td>
+                        <td>${result.netzbezug[i]}</td>
+                        <td>${result.batteriebezug[i]}</td>
+                        <td>${result.batterie_stand[i]}</td>`;
+                
+                // Preisspalte nur für Modell 2 & 3
+                if ((modell === 2 || modell === 3) && result.preise) {
+                    html += `<td>${result.preise[i]}</td>`;
+                }
+                
+                html += `
+                        <td>${result.kosten_pro_stunde[i].toFixed(4)}</td>
+                    </tr>
+                `;
+            }
+            
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            ergebnisDiv.innerHTML = html;
+            
+            // Diagramme erstellen nach DOM-Update
+            setTimeout(() => {
+                erstelleDiagramme(result);
+            }, 100);
+        }
+        
+        function erstelleDiagramme(result) {
+            const stunden = Array.from({length: 24}, (_, i) => `${String(i).padStart(2, '0')}:00`);
+            
+            // Chart 1: Strombezug (Netz vs Batterie)
+            const ctx1 = document.getElementById('bezugChart');
+            new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: stunden,
+                    datasets: [
+                        {
+                            label: 'Netzbezug',
+                            data: result.netzbezug,
+                            backgroundColor: 'rgba(255, 99, 132, 0.7)',
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: 'Batteriebezug',
+                            data: result.batteriebezug,
+                            backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Leistung (Wh)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Uhrzeit'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+            
+            // Chart 2: Batteriestand
+            const ctx2 = document.getElementById('batterieChart');
+            new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels: stunden,
+                    datasets: [{
+                        label: 'Batteriestand',
+                        data: result.batterie_stand,
+                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                        borderColor: 'rgba(75, 192, 192, 1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Batteriestand (Wh)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Uhrzeit'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+            
+            // Chart 3: Kosten pro Stunde
+            const ctx3 = document.getElementById('kostenChart');
+            new Chart(ctx3, {
+                type: 'bar',
+                data: {
+                    labels: stunden,
+                    datasets: [{
+                        label: 'Kosten',
+                        data: result.kosten_pro_stunde,
+                        backgroundColor: 'rgba(255, 206, 86, 0.7)',
+                        borderColor: 'rgba(255, 206, 86, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Kosten (€)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Uhrzeit'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+            
+            // Chart 4: Übersicht kombiniert
+            const ctx4 = document.getElementById('uebersichtChart');
+            new Chart(ctx4, {
+                type: 'line',
+                data: {
+                    labels: stunden,
+                    datasets: [
+                        {
+                            label: 'Netzbezug',
+                            data: result.netzbezug,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: false
+                        },
+                        {
+                            label: 'Batteriebezug',
+                            data: result.batteriebezug,
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: false
+                        },
+                        {
+                            label: 'Batteriestand',
+                            data: result.batterie_stand,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.4,
+                            fill: false,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Bezug (Wh)'
+                            },
+                            beginAtZero: true
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Batteriestand (Wh)'
+                            },
+                            beginAtZero: true,
+                            grid: {
+                                drawOnChartArea: false,
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Uhrzeit'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        }
+                    }
+                }
+            });
+        }
+        
+        function zeigeError(message) {
+            const ergebnisDiv = document.getElementById('ergebnis');
+            ergebnisDiv.innerHTML = `
+                <div class="error">
+                    <strong>❌ Fehler:</strong> ${message}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
