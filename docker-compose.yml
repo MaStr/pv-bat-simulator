@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  pv-bat-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pv-bat-simulator
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    environment:
+      - FLASK_APP=app.py
+      - FLASK_RUN_HOST=0.0.0.0

@@ -121,6 +121,25 @@ Verwendet die [batcontrol-Bibliothek](https://github.com/muexxl/batcontrol) mit 
 
 **Anwendungsfall**: Realistische Simulation mit bewährter Open-Source-Steuerungslogik
 
+## Deployment
+
+Das Projekt verfügt über eine automatische Deployment-Pipeline, die bei jedem Push auf den `main` Branch ausgelöst wird. Die Pipeline führt folgende Schritte auf dem Remote-Server aus:
+
+1. Repository-Code aktualisieren
+2. Docker-Images mit `docker-compose build` erstellen
+3. Container mit `docker-compose up -d` starten
+4. Alte Docker-Images aufräumen
+
+### Erforderliche GitHub Secrets
+
+Für das automatische Deployment müssen folgende Secrets in den GitHub Repository Settings konfiguriert werden:
+
+- `DEPLOY_HOST`: Hostname oder IP-Adresse des Remote-Servers
+- `DEPLOY_USER`: SSH-Benutzername für den Remote-Server
+- `DEPLOY_SSH_KEY`: SSH Private Key für die Authentifizierung
+- `DEPLOY_PATH`: Pfad zum Projektverzeichnis auf dem Remote-Server
+- `DEPLOY_PORT`: (Optional) SSH-Port, Standard ist 22
+
 ## Parameter
 
 Die Simulationen arbeiten mit folgenden Parametern:
