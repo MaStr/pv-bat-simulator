@@ -1,0 +1,38 @@
+name: Deploy to Remote Server
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            # Navigate to the project directory
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Pull latest changes from the repository
+            git pull origin main
+
+            # Build and start services with docker-compose
+            docker-compose build
+            docker-compose up -d
+
+            # Clean up old unused Docker images
+            docker image prune -a -f --filter "until=24h"
+
+            # Optional: Remove dangling images
+            docker image prune -f
