@@ -509,18 +509,25 @@ def berechne_batcontrol_steuerung(preise, verbrauch, pv_strom, batterie_kapazita
 
 @app.route('/')
 def index():
-    # Beispieldaten
-    beispiel_verbrauch = [300, 250, 200, 180, 200, 350, 500, 600, 400, 350, 
-                          300, 350, 400, 350, 300, 400, 600, 800, 900, 700, 
-                          600, 500, 400, 350]
-    
-    beispiel_pv = [0, 0, 0, 0, 0, 50, 200, 400, 600, 800, 
-                   900, 950, 900, 800, 600, 400, 200, 50, 0, 0, 
-                   0, 0, 0, 0]
-    
-    return render_template('index.html', 
-                         beispiel_verbrauch=beispiel_verbrauch,
-                         beispiel_pv=beispiel_pv)
+    return render_template('index.html')
+
+
+@app.route('/beispieldaten', methods=['GET'])
+def beispieldaten():
+    """
+    Liefert Beispieldaten für das Frontend
+    """
+    return jsonify({
+        'verbrauch': [300, 250, 200, 180, 200, 350, 500, 600, 400, 350, 
+                      300, 350, 400, 350, 300, 400, 600, 800, 900, 700, 
+                      600, 500, 400, 350],
+        'pv_strom': [0, 0, 0, 0, 0, 50, 200, 400, 600, 800, 
+                     900, 950, 900, 800, 600, 400, 200, 50, 0, 0, 
+                     0, 0, 0, 0],
+        'preise': [0.319, 0.316, 0.315, 0.315, 0.31, 0.32, 0.33, 0.38, 0.40, 0.39, 
+                   0.37, 0.365, 0.36, 0.36, 0.37, 0.389, 0.42, 0.42, 0.41, 0.39, 
+                   0.37, 0.35, 0.34, 0.32]
+    })
 
 
 @app.route('/berechnen', methods=['POST'])
