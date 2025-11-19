@@ -275,6 +275,7 @@
                     <option value="1">Modell 1: Linearer Verbrauch - Statischer Preis</option>
                     <option value="2">Modell 2: Linearer Verbrauch - Dynamischer Preis</option>
                     <option value="3">Modell 3: Aktive Steuerung - Dynamischer Preis (Optimiert)</option>
+                    <option value="4">Modell 4: BatControl Steuerung - Dynamischer Preis (3-Modi-Logik)</option>
                 </select>
             </div>
         </div>
@@ -371,6 +372,56 @@
                 </div>
             </div>
             
+            <!-- BatControl-Parameter (nur für Modell 4) -->
+            <div class="section" id="section-batcontrol-params" style="display: none;">
+                <h2>🤖 BatControl Steuerungsparameter</h2>
+                <div class="info-box">
+                    <strong>ℹ️ BatControl Modus:</strong> Nutzt drei intelligente Modi:
+                    <ul style="margin: 10px 0 0 20px;">
+                        <li><strong>MODE -1 (Laden):</strong> Batterie aus Netz laden bei niedrigen Preisen</li>
+                        <li><strong>MODE 0 (Schonen):</strong> Batterie nicht entladen wenn Preise steigen</li>
+                        <li><strong>MODE 10 (Normal):</strong> Batterie normal nutzen</li>
+                    </ul>
+                </div>
+                <div class="battery-params">
+                    <div class="input-group">
+                        <label for="min_preis_differenz">Mindest-Preisdifferenz (€/kWh)</label>
+                        <input type="number" id="min_preis_differenz" name="min_preis_differenz" 
+                               value="0.05" step="0.01" min="0">
+                        <small style="color: #666; margin-top: 5px; display: block;">
+                            Preisunterschied für aktives Nachladen aus dem Netz
+                        </small>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="always_allow_discharge_limit">Entlade-Freigabe SOC (%)</label>
+                        <input type="number" id="always_allow_discharge_limit" name="always_allow_discharge_limit" 
+                               value="90" min="0" max="100" step="1">
+                        <small style="color: #666; margin-top: 5px; display: block;">
+                            Ab diesem Ladestand wird immer entladen (MODE 10)
+                        </small>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="max_charging_from_grid_limit">Max. Netzladung SOC (%)</label>
+                        <input type="number" id="max_charging_from_grid_limit" name="max_charging_from_grid_limit" 
+                               value="80" min="0" max="100" step="1">
+                        <small style="color: #666; margin-top: 5px; display: block;">
+                            Maximaler Ladestand beim Laden aus dem Netz
+                        </small>
+                    </div>
+                    
+                    <div class="input-group">
+                        <label for="anfangs_soc_batcontrol">Anfangs-Ladestand (0-100%)</label>
+                        <input type="number" id="anfangs_soc_batcontrol" name="anfangs_soc_batcontrol" 
+                               value="20" min="0" max="100" step="1">
+                        <small style="color: #666; margin-top: 5px; display: block;">
+                            Ladestand der Batterie zu Beginn der Simulation
+                        </small>
+                    </div>
+                </div>
+            </div>
+            
             <div class="button-container">
                 <button type="submit">🚀 Berechnung starten</button>
             </div>
@@ -392,24 +443,35 @@
             const sectionDynamisch = document.getElementById('section-dynamische-preise');
             const preisAbstandGroup = document.getElementById('preis-abstand-group');
             const anfangsSocGroup = document.getElementById('anfangs-soc-group');
+            const sectionBatcontrol = document.getElementById('section-batcontrol-params');
             
             if (modell === 1) {
                 sectionStatisch.style.display = 'block';
                 sectionDynamisch.style.display = 'none';
                 preisAbstandGroup.style.display = 'block';
                 anfangsSocGroup.style.display = 'none';
+                sectionBatcontrol.style.display = 'none';
                 document.getElementById('statischer_preis').required = true;
             } else if (modell === 2) {
                 sectionStatisch.style.display = 'none';
                 sectionDynamisch.style.display = 'block';
                 preisAbstandGroup.style.display = 'none';
                 anfangsSocGroup.style.display = 'none';
+                sectionBatcontrol.style.display = 'none';
                 document.getElementById('statischer_preis').required = false;
             } else if (modell === 3) {
                 sectionStatisch.style.display = 'none';
                 sectionDynamisch.style.display = 'block';
                 preisAbstandGroup.style.display = 'block';
                 anfangsSocGroup.style.display = 'block';
+                sectionBatcontrol.style.display = 'none';
+                document.getElementById('statischer_preis').required = false;
+            } else if (modell === 4) {
+                sectionStatisch.style.display = 'none';
+                sectionDynamisch.style.display = 'block';
+                preisAbstandGroup.style.display = 'none';
+                anfangsSocGroup.style.display = 'none';
+                sectionBatcontrol.style.display = 'block';
                 document.getElementById('statischer_preis').required = false;
             }
         });
@@ -466,6 +528,16 @@
                 data.preise = preise;
                 data.preis_abstand = parseFloat(formData.get('preis_abstand'));
                 data.anfangs_soc = parseFloat(formData.get('anfangs_soc')) / 100.0;  // Konvertiere % in Dezimalzahl
+            } else if (modell === 4) {
+                const preise = [];
+                for (let i = 0; i < 24; i++) {
+                    preise.push(parseFloat(formData.get(`preis_${i}`)));
+                }
+                data.preise = preise;
+                data.min_preis_differenz = parseFloat(formData.get('min_preis_differenz'));
+                data.always_allow_discharge_limit = parseFloat(formData.get('always_allow_discharge_limit')) / 100.0;
+                data.max_charging_from_grid_limit = parseFloat(formData.get('max_charging_from_grid_limit')) / 100.0;
+                data.anfangs_soc = parseFloat(formData.get('anfangs_soc_batcontrol')) / 100.0;
             }
             
             try {
@@ -563,13 +635,25 @@
                         <thead>
                             <tr>
                                 <th>Stunde</th>
-                                <th>Netzbezug (Wh)</th>
+                                <th>Netzbezug (Wh)</th>`;
+            
+            // Netzeinspeisung nur für Modell 4
+            if (modell === 4 && result.netzeinspeisung) {
+                html += `<th>Netzeinspeisung (Wh)</th>`;
+            }
+            
+            html += `
                                 <th>Batteriebezug (Wh)</th>
                                 <th>Batteriestand (Wh)</th>`;
             
-            // Preisspalte nur für Modell 2 & 3
-            if ((modell === 2 || modell === 3) && result.preise) {
+            // Preisspalte nur für Modell 2, 3 & 4
+            if ((modell === 2 || modell === 3 || modell === 4) && result.preise) {
                 html += `<th>Preis (€/kWh)</th>`;
+            }
+            
+            // Modus-Spalte nur für Modell 4
+            if (modell === 4 && result.modi) {
+                html += `<th>Modus</th>`;
             }
             
             html += `
@@ -583,13 +667,27 @@
                 html += `
                     <tr>
                         <td><strong>${String(i).padStart(2, '0')}:00</strong></td>
-                        <td>${result.netzbezug[i]}</td>
+                        <td>${result.netzbezug[i]}</td>`;
+                
+                // Netzeinspeisung nur für Modell 4
+                if (modell === 4 && result.netzeinspeisung) {
+                    html += `<td>${result.netzeinspeisung[i]}</td>`;
+                }
+                
+                html += `
                         <td>${result.batteriebezug[i]}</td>
                         <td>${result.batterie_stand[i]}</td>`;
                 
-                // Preisspalte nur für Modell 2 & 3
-                if ((modell === 2 || modell === 3) && result.preise) {
+                // Preisspalte nur für Modell 2, 3 & 4
+                if ((modell === 2 || modell === 3 || modell === 4) && result.preise) {
                     html += `<td>${result.preise[i]}</td>`;
+                }
+                
+                // Modus-Spalte nur für Modell 4
+                if (modell === 4 && result.modi) {
+                    const modusText = result.modi[i] === -1 ? 'LADEN' : 
+                                     result.modi[i] === 0 ? 'STOP' : 'NORMAL';
+                    html += `<td>${modusText}</td>`;
                 }
                 
                 html += `
