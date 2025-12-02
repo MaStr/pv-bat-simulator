@@ -16,6 +16,11 @@ app = Flask(__name__)
 # Initialize cache for aWATTar API data (48 hours TTL)
 awattar_cache = TTLCache(maxsize=100, ttl=172800)  # 48 hours in seconds
 
+# Tracking variables for statistics
+calculation_stats = []  # List of (timestamp, model_number) tuples
+cache_hit_stats = {'market': 0, 'production': 0}
+cache_miss_stats = {'market': 0, 'production': 0}
+
 
 # ===== aWATTar API Integration =====
 
@@ -62,12 +67,18 @@ def fetch_market_data(date_str=None):
     Returns:
         dict: API response data or error dict
     """
-    cache_key = f"market_{date_str or 'today'}"
+    if date_str is None:
+        date_str = datetime.datetime.now(pytz.timezone('Europe/Berlin')).strftime('%Y-%m-%d')
+    cache_key = f"market_{date_str}"
 
     # Check cache first
     if cache_key in awattar_cache:
+        cache_hit_stats['market'] += 1
         return awattar_cache[cache_key]
 
+    # Cache miss
+    cache_miss_stats['market'] += 1
+    
     try:
         start_ms, end_ms = get_day_timestamps(date_str)
         url = f"https://api.awattar.de/v1/marketdata?start={start_ms}&end={end_ms}"
@@ -97,12 +108,18 @@ def fetch_production_data(date_str=None):
     Returns:
         dict: API response data or error dict
     """
-    cache_key = f"production_{date_str or 'today'}"
+    if date_str is None:
+        date_str = datetime.datetime.now(pytz.timezone('Europe/Berlin')).strftime('%Y-%m-%d')
+    cache_key = f"production_{date_str}"
 
     # Check cache first
     if cache_key in awattar_cache:
+        cache_hit_stats['production'] += 1
         return awattar_cache[cache_key]
 
+    # Cache miss
+    cache_miss_stats['production'] += 1
+    
     try:
         start_ms, end_ms = get_day_timestamps(date_str)
         url = f"https://api.awattar.de/v1/power/productions?start={start_ms}&end={end_ms}"
@@ -804,6 +821,88 @@ def beispieldaten():
     })
 
 
+@app.route('/health', methods=['GET'])
+def health():
+    """
+    Health endpoint that provides statistics about:
+    - Calculation variants used in the last hour
+    - Number of days in cache
+    - Cache hit statistics
+    """
+    try:
+        # Get current time and one hour ago
+        now = datetime.datetime.now()
+        one_hour_ago = now - datetime.timedelta(hours=1)
+        
+        # Filter calculations from the last hour
+        recent_calculations = [
+            (ts, model) for ts, model in calculation_stats 
+            if ts >= one_hour_ago
+        ]
+        
+        # Count calculations by model
+        model_counts = {}
+        model_names = {
+            1: 'Linearer Verbrauch (statisch)',
+            2: 'Linearer Verbrauch (dynamisch)',
+            3: 'Aktive Steuerung',
+            4: 'BatControl Steuerung'
+        }
+        
+        for _, model in recent_calculations:
+            model_name = model_names.get(model, f'Unbekannt ({model})')
+            model_counts[model_name] = model_counts.get(model_name, 0) + 1
+        
+        # Count unique days in cache
+        cached_days = set()
+        for key in awattar_cache.keys():
+            # Extract date from cache key (format: "market_YYYY-MM-DD" or "production_YYYY-MM-DD")
+            if '_' in key:
+                date_part = key.split('_', 1)[1]
+                cached_days.add(date_part)
+        
+        # Calculate cache hit rate
+        total_market = cache_hit_stats['market'] + cache_miss_stats['market']
+        total_production = cache_hit_stats['production'] + cache_miss_stats['production']
+        
+        market_hit_rate = (cache_hit_stats['market'] / total_market * 100) if total_market > 0 else 0
+        production_hit_rate = (cache_hit_stats['production'] / total_production * 100) if total_production > 0 else 0
+        
+        return jsonify({
+            'status': 'healthy',
+            'timestamp': now.isoformat(),
+            'calculations_last_hour': {
+                'total': len(recent_calculations),
+                'by_model': model_counts
+            },
+            'cache': {
+                'days_cached': len(cached_days),
+                'cache_size': len(awattar_cache),
+                'hits': {
+                    'market': cache_hit_stats['market'],
+                    'production': cache_hit_stats['production'],
+                    'total': cache_hit_stats['market'] + cache_hit_stats['production']
+                },
+                'misses': {
+                    'market': cache_miss_stats['market'],
+                    'production': cache_miss_stats['production'],
+                    'total': cache_miss_stats['market'] + cache_miss_stats['production']
+                },
+                'hit_rate': {
+                    'market': round(market_hit_rate, 2),
+                    'production': round(production_hit_rate, 2),
+                    'overall': round((cache_hit_stats['market'] + cache_hit_stats['production']) / 
+                                   (total_market + total_production) * 100, 2) if (total_market + total_production) > 0 else 0
+                }
+            }
+        })
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
+
+
 @app.route('/berechnen', methods=['POST'])
 def berechnen():
     try:
@@ -811,6 +910,9 @@ def berechnen():
 
         # Modell auswählen
         modell = data.get('modell', 1)
+        
+        # Track calculation with timestamp
+        calculation_stats.append((datetime.datetime.now(), modell))
 
         # Gemeinsame Eingabedaten extrahieren
         verbrauch = [float(x) for x in data['verbrauch']]
