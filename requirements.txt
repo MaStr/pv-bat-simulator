@@ -1,4 +1,6 @@
 flask==3.0.0
 pulp==2.7.0
-numpy==1.26.2
-pytz==2023.3
+numpy==2.3.5
+pytz==2024.1
+cachetools==5.3.2
+requests==2.31.0

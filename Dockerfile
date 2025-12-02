@@ -5,6 +5,7 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Installiere System-Abhängigkeiten für PuLP (CBC Solver) und Build-Tools
+# gcc/g++ als Fallback falls keine Binary-Wheels verfügbar sind
 RUN apt-get update && apt-get install -y \
     coinor-cbc \
     gcc \
@@ -15,12 +16,14 @@ RUN apt-get update && apt-get install -y \
 # Kopiere requirements.txt (falls vorhanden) oder erstelle eine
 COPY requirements.txt* ./
 
-# Installiere Python-Abhängigkeiten
-RUN pip install --no-cache-dir \
-    flask \
-    pulp \
-    numpy \
-    pytz
+# Installiere Python-Abhängigkeiten (only binary wheels, no compilation)
+RUN pip install --no-cache-dir --only-binary=:all: \
+    flask==3.0.0 \
+    pulp==2.7.0 \
+    numpy==1.26.4 \
+    pytz==2024.1 \
+    cachetools==5.3.2 \
+    requests==2.31.0
 
 # Lade das batcontrol wheel-file von GitHub herunter und installiere es
 RUN wget https://github.com/muexxl/batcontrol/releases/download/0.5.5/batcontrol-0.5.5-py3-none-any.whl \
