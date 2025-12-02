@@ -5,11 +5,18 @@ import numpy as np
 import datetime
 import pytz
 import requests
+import logging
 from cachetools import TTLCache
 
 # Import batcontrol logic
 from batcontrol.logic.default import DefaultLogic
 from batcontrol.logic.logic_interface import CalculationInput, CalculationParameters
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 app = Flask(__name__)
 
@@ -555,30 +562,49 @@ def berechne_batcontrol_steuerung(preise, verbrauch, pv_strom, batterie_kapazita
     - max_charging_from_grid_limit: Maximaler SOC beim Laden aus dem Netz (0.0-1.0)
     - anfangs_soc: Anfänglicher Ladestand der Batterie (0.0-1.0, Standard: 0.2)
     """
+    logger = logging.getLogger('batcontrol_steuerung')
+    logger.info("="*80)
+    logger.info("Starting BatControl Calculation")
+    logger.info(f"Input Parameters:")
+    logger.info(f"  Battery Capacity: {batterie_kapazitaet} Wh ({batterie_kapazitaet/1000} kWh)")
+    logger.info(f"  Max Charge: {max_lade_leistung} W")
+    logger.info(f"  Max Discharge: {max_entlade_leistung} W")
+    logger.info(f"  Initial SOC: {anfangs_soc*100}%")
+    logger.info(f"  Min Price Diff: {min_preis_differenz} EUR/kWh")
+    logger.info(f"  Always Discharge Limit: {always_allow_discharge_limit*100}%")
+    logger.info(f"  Max Grid Charging Limit: {max_charging_from_grid_limit*100}%")
+    logger.info(f"  Consumption: {len(verbrauch)} values")
+    logger.info(f"  Production: {len(pv_strom)} values")
+    logger.info(f"  Prices: {len(preise)} values")
 
-    # Konvertiere Wh in kWh für batcontrol
-    verbrauch_kwh = np.array([v / 1000 for v in verbrauch])
-    pv_kwh = np.array([pv / 1000 for pv in pv_strom])
-    batterie_kapazitaet_kwh = batterie_kapazitaet / 1000
+    # batcontrol expects Wh (not kWh) for production, consumption, and capacity
+    verbrauch_wh = np.array(verbrauch)
+    pv_wh = np.array(pv_strom)
+    batterie_kapazitaet_wh = batterie_kapazitaet
+    
+    logger.debug(f"Using Wh units - Capacity: {batterie_kapazitaet_wh} Wh ({batterie_kapazitaet_wh/1000} kWh)")
 
     # Initialisiere batcontrol DefaultLogic
     timezone = pytz.timezone('Europe/Berlin')
     logic = DefaultLogic(timezone)
+    logger.info("Initialized DefaultLogic with Europe/Berlin timezone")
 
     # Setze Calculation Parameters
     calc_params = CalculationParameters(
         max_charging_from_grid_limit=max_charging_from_grid_limit,
         min_price_difference=min_preis_differenz,
         min_price_difference_rel=0.0,
-        max_capacity=batterie_kapazitaet_kwh
+        max_capacity=batterie_kapazitaet_wh  # Wh as per API specification
     )
     logic.set_calculation_parameters(calc_params)
+    logger.info(f"Set calculation parameters: {calc_params}")
 
     # Setze always_allow_discharge_limit über common logic
     logic.common.set_always_allow_discharge_limit(always_allow_discharge_limit)
+    logger.info(f"Set always_allow_discharge_limit: {always_allow_discharge_limit}")
 
     # Initialisierung für Simulation
-    batterie_stand_kwh = anfangs_soc * batterie_kapazitaet_kwh  # in kWh
+    batterie_stand_wh = anfangs_soc * batterie_kapazitaet_wh  # in Wh
     netzbezug = []
     netzeinspeisung = []
     batteriebezug = []
@@ -588,113 +614,128 @@ def berechne_batcontrol_steuerung(preise, verbrauch, pv_strom, batterie_kapazita
 
     # Simuliere Stunde für Stunde mit batcontrol-Logik
     for stunde in range(24):
+        logger.debug(f"\n--- Hour {stunde} ---")
         # Verbleibende Stunden für Forecast
         verbleibende_stunden = 24 - stunde
 
-        # Erstelle Forecast-Arrays für die verbleibenden Stunden
-        future_consumption = verbrauch_kwh[stunde:stunde+verbleibende_stunden]
-        future_production = pv_kwh[stunde:stunde+verbleibende_stunden]
+        # Erstelle Forecast-Arrays für die verbleibenden Stunden (in Wh)
+        future_consumption = verbrauch_wh[stunde:stunde+verbleibende_stunden]
+        future_production = pv_wh[stunde:stunde+verbleibende_stunden]
         future_prices = {i: preise[stunde + i] for i in range(len(future_consumption))}
 
-        # Berechne verfügbare und genutzte Kapazität
-        stored_usable_energy_kwh = batterie_stand_kwh
-        free_capacity_kwh = batterie_kapazitaet_kwh - batterie_stand_kwh
+        # Berechne verfügbare und genutzte Kapazität (in Wh)
+        stored_usable_energy_wh = batterie_stand_wh
+        free_capacity_wh = batterie_kapazitaet_wh - batterie_stand_wh
+        
+        logger.debug(f"  Current: consumption={verbrauch_wh[stunde]:.1f} Wh, production={pv_wh[stunde]:.1f} Wh, price={preise[stunde]:.4f} EUR/kWh")
+        logger.debug(f"  Battery: SOC={batterie_stand_wh:.1f} Wh ({batterie_stand_wh/batterie_kapazitaet_wh*100:.1f}%), free={free_capacity_wh:.1f} Wh")
 
-        # Erstelle CalculationInput für batcontrol
+        # Erstelle CalculationInput für batcontrol (all values in Wh)
         calc_input = CalculationInput(
             production=future_production,
             consumption=future_consumption,
             prices=future_prices,
-            stored_energy=batterie_stand_kwh,
-            stored_usable_energy=stored_usable_energy_kwh,
-            free_capacity=free_capacity_kwh
+            stored_energy=batterie_stand_wh,
+            stored_usable_energy=stored_usable_energy_wh,
+            free_capacity=free_capacity_wh
         )
 
         # Rufe batcontrol-Logik auf
         current_time = datetime.datetime.now(timezone).replace(hour=stunde, minute=0, second=0)
-        logic.calculate(calc_input, current_time)
-        inverter_settings = logic.get_inverter_control_settings()
+        try:
+            logic.calculate(calc_input, current_time)
+            inverter_settings = logic.get_inverter_control_settings()
+            logger.debug(f"  Inverter: allow_discharge={inverter_settings.allow_discharge}, charge_from_grid={inverter_settings.charge_from_grid}, charge_rate={inverter_settings.charge_rate}W")
+        except Exception as e:
+            logger.error(f"  ERROR in batcontrol calculation: {type(e).__name__}: {e}")
+            raise
 
         # Interpretiere Entscheidung von batcontrol
-        bedarf_kwh = verbrauch_kwh[stunde]
-        pv_kwh_stunde = pv_kwh[stunde]
+        bedarf_wh = verbrauch_wh[stunde]
+        pv_wh_stunde = pv_wh[stunde]
         preis = preise[stunde]
 
-        # Berechne PV-Überschuss oder Fehlbetrag
-        pv_bilanz = pv_kwh_stunde - bedarf_kwh
+        # Berechne PV-Überschuss oder Fehlbetrag (in Wh)
+        pv_bilanz = pv_wh_stunde - bedarf_wh
 
         # Bestimme Modus basierend auf batcontrol-Entscheidung
         if inverter_settings.charge_from_grid:
             modus = -1  # CHARGE FROM GRID
-            charge_rate_kwh = inverter_settings.charge_rate / 1000  # W -> kWh
+            charge_rate_wh = inverter_settings.charge_rate  # Already in Wh
+            logger.debug(f"  Mode: CHARGE FROM GRID (charge_rate={charge_rate_wh:.1f} Wh)")
 
             # Lade Batterie mit PV-Überschuss
             if pv_bilanz > 0:
-                ladung_pv = min(pv_bilanz, free_capacity_kwh)
-                batterie_stand_kwh += ladung_pv
-                free_capacity_kwh -= ladung_pv
+                ladung_pv = min(pv_bilanz, free_capacity_wh)
+                batterie_stand_wh += ladung_pv
+                free_capacity_wh -= ladung_pv
                 pv_ueberschuss = ladung_pv
             else:
                 pv_ueberschuss = 0
 
             # Zusätzlich aus Netz laden (bis zum Limit)
             max_netz_ladung = min(
-                charge_rate_kwh - pv_ueberschuss,
-                batterie_kapazitaet_kwh * max_charging_from_grid_limit - batterie_stand_kwh
+                charge_rate_wh - pv_ueberschuss,
+                batterie_kapazitaet_wh * max_charging_from_grid_limit - batterie_stand_wh
             )
             max_netz_ladung = max(0, max_netz_ladung)  # Nicht negativ
-            batterie_stand_kwh += max_netz_ladung
+            batterie_stand_wh += max_netz_ladung
 
             # Netzbezug: Fehlbetrag (falls vorhanden) + Netzladung
-            netzbezug_kwh = max(0, -pv_bilanz) + max_netz_ladung
-            netzeinspeisung_kwh = max_netz_ladung
-            batteriebezug_kwh = 0
+            netzbezug_wh = max(0, -pv_bilanz) + max_netz_ladung
+            netzeinspeisung_wh = max_netz_ladung
+            batteriebezug_wh = 0
 
         elif not inverter_settings.allow_discharge:
             modus = 0  # AVOID DISCHARGE
+            logger.debug(f"  Mode: AVOID DISCHARGE")
 
             # Lade Batterie mit PV-Überschuss
             if pv_bilanz > 0:
-                ladung = min(pv_bilanz, free_capacity_kwh)
-                batterie_stand_kwh += ladung
-                netzbezug_kwh = 0
+                ladung = min(pv_bilanz, free_capacity_wh)
+                batterie_stand_wh += ladung
+                netzbezug_wh = 0
             else:
                 # Fehlbetrag aus Netz (nicht aus Batterie!)
-                netzbezug_kwh = -pv_bilanz
+                netzbezug_wh = -pv_bilanz
 
-            netzeinspeisung_kwh = 0
-            batteriebezug_kwh = 0
+            netzeinspeisung_wh = 0
+            batteriebezug_wh = 0
 
         else:
             modus = 10  # DISCHARGE ALLOWED
+            logger.debug(f"  Mode: DISCHARGE ALLOWED")
 
             # Lade Batterie mit PV-Überschuss
             if pv_bilanz > 0:
-                ladung = min(pv_bilanz, free_capacity_kwh)
-                batterie_stand_kwh += ladung
-                netzbezug_kwh = 0
-                batteriebezug_kwh = 0
+                ladung = min(pv_bilanz, free_capacity_wh)
+                batterie_stand_wh += ladung
+                netzbezug_wh = 0
+                batteriebezug_wh = 0
             else:
                 # Fehlbetrag aus Batterie decken
                 fehlbetrag = -pv_bilanz
-                entladung = min(fehlbetrag, batterie_stand_kwh)
-                batterie_stand_kwh -= entladung
-                batteriebezug_kwh = entladung
+                entladung = min(fehlbetrag, batterie_stand_wh)
+                batterie_stand_wh -= entladung
+                batteriebezug_wh = entladung
 
                 # Rest aus Netz
-                netzbezug_kwh = fehlbetrag - entladung
+                netzbezug_wh = fehlbetrag - entladung
 
-            netzeinspeisung_kwh = 0
+            netzeinspeisung_wh = 0
 
-        # Kosten berechnen (nur für Netzbezug)
-        kosten_stunde = netzbezug_kwh * preis
+        # Kosten berechnen (nur für Netzbezug) - convert Wh to kWh for price calculation
+        kosten_stunde = (netzbezug_wh / 1000) * preis
+        
+        logger.debug(f"  Results: grid={netzbezug_wh:.1f} Wh, battery_discharge={batteriebezug_wh:.1f} Wh, grid_charge={netzeinspeisung_wh:.1f} Wh, cost={kosten_stunde:.4f} EUR")
+        logger.debug(f"  Battery after: {batterie_stand_wh:.1f} Wh ({batterie_stand_wh/batterie_kapazitaet_wh*100:.1f}%)")
 
-        # Konvertiere zurück in Wh für Ausgabe
-        netzbezug.append(round(netzbezug_kwh * 1000, 2))
-        netzeinspeisung.append(round(netzeinspeisung_kwh * 1000, 2))
-        batteriebezug.append(round(batteriebezug_kwh * 1000, 2))
+        # Store values in Wh for output
+        netzbezug.append(round(netzbezug_wh, 2))
+        netzeinspeisung.append(round(netzeinspeisung_wh, 2))
+        batteriebezug.append(round(batteriebezug_wh, 2))
         kosten_pro_stunde.append(round(kosten_stunde, 4))
-        batterie_stand_verlauf.append(round(batterie_stand_kwh * 1000, 2))
+        batterie_stand_verlauf.append(round(batterie_stand_wh, 2))
         modi_verlauf.append(modus)
 
     gesamtkosten = sum(kosten_pro_stunde)
@@ -705,6 +746,13 @@ def berechne_batcontrol_steuerung(preise, verbrauch, pv_strom, batterie_kapazita
         gewichteter_preis = gesamtkosten / gesamt_netzbezug_kwh
     else:
         gewichteter_preis = 0
+    
+    logger.info(f"\nFinal Results:")
+    logger.info(f"  Total Cost: {gesamtkosten:.2f} EUR")
+    logger.info(f"  Total Grid Purchase: {gesamt_netzbezug_kwh:.2f} kWh")
+    logger.info(f"  Weighted Avg Price: {gewichteter_preis:.4f} EUR/kWh")
+    logger.info(f"  Final Battery SOC: {batterie_stand_wh:.2f} Wh ({batterie_stand_wh/batterie_kapazitaet_wh*100:.1f}%)")
+    logger.info("="*80)
 
     return {
         'netzbezug': netzbezug,
