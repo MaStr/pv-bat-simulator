@@ -852,8 +852,8 @@
                     <div class="value">${result.gesamtkosten.toFixed(2)} €</div>
                 </div>`;
             
-            // Für Modell 2 & 3: Gewichteten Durchschnittspreis anzeigen
-            if ((modell === 2 || modell === 3) && result.gewichteter_preis !== undefined) {
+            // Für Modell 2, 3 & 4: Gewichteten Durchschnittspreis anzeigen
+            if ((modell === 2 || modell === 3 || modell === 4) && result.gewichteter_preis !== undefined) {
                 html += `
                 <div class="result-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
                     <h3>📊 Gewichteter Durchschnittspreis</h3>
