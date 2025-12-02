@@ -274,7 +274,8 @@ def berechne_linearer_verbrauch(statischer_preis, verbrauch, pv_strom, batterie_
         'batteriebezug': batteriebezug,
         'kosten_pro_stunde': kosten_pro_stunde,
         'batterie_stand': batterie_stand_verlauf,
-        'gesamtkosten': round(gesamtkosten, 2)
+        'gesamtkosten': round(gesamtkosten, 2),
+        'pv_produktion': [round(pv, 2) for pv in pv_strom]
     }
 
 
@@ -365,7 +366,8 @@ def berechne_linearer_verbrauch_dynamisch(preise, verbrauch, pv_strom, batterie_
         'preise': verwendete_preise,
         'gesamtkosten': round(gesamtkosten, 2),
         'gesamt_netzbezug_kwh': round(gesamt_netzbezug_kwh, 2),
-        'gewichteter_preis': round(gewichteter_preis, 4)
+        'gewichteter_preis': round(gewichteter_preis, 4),
+        'pv_produktion': [round(pv, 2) for pv in pv_strom]
     }
 
 
@@ -507,7 +509,8 @@ def berechne_aktive_steuerung(preise, verbrauch, pv_strom, batterie_kapazitaet,
         'gesamt_netzbezug_kwh': round(gesamt_netzbezug_kwh, 2),
         'gewichteter_preis': round(gewichteter_preis, 4),
         'pv_ueberschuss': pv_ueberschuss,
-        'optimierungsstatus': pl.LpStatus[prob.status]
+        'optimierungsstatus': pl.LpStatus[prob.status],
+        'pv_produktion': [round(pv, 2) for pv in pv_strom]
     }
 
 
@@ -696,7 +699,8 @@ def berechne_batcontrol_steuerung(preise, verbrauch, pv_strom, batterie_kapazita
         'modi': modi_verlauf,
         'gesamtkosten': round(gesamtkosten, 2),
         'gesamt_netzbezug_kwh': round(gesamt_netzbezug_kwh, 2),
-        'gewichteter_preis': round(gewichteter_preis, 4)
+        'gewichteter_preis': round(gewichteter_preis, 4),
+        'pv_produktion': [round(pv, 2) for pv in pv_strom]
     }
 
 
